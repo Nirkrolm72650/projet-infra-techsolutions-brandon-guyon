@@ -3,7 +3,7 @@
 
 ## 1. Vue d'ensemble de l'architecture
 
-![Schéma d'architecture](/Screenshots/schéma-infra-virtualisée.drawio.png)
+![Schéma d'architecture](Screenshots/schéma-infra-virtualisée.drawio.png)
 
 L'infrastructure repose sur six machines virtuelles réparties sur trois nœuds Proxmox (`pve-node-0`, `pve-node-02`, `pve-node-03`) :
 
