@@ -1,0 +1,158 @@
+---
+- name: Déploiement du cluster GlusterFS et de Nginx (Front-End)
+  hosts: web
+  become: true
+
+  vars:
+    gluster_brick_dir: "/data/glusterfs/web_brick"
+    gluster_vol_name: "web_vol"
+    web_mount_dir: "/var/www/html"
+    web01_prod_ip: "172.16.0.31"
+    web02_prod_ip: "172.16.0.32"
+
+  tasks:
+    # --------------------------------------------------------------------------
+    # 1. INSTALLATION DES SERVICES
+    # --------------------------------------------------------------------------
+    - name: Installer GlusterFS et Nginx
+      ansible.builtin.apt:
+        name:
+          - glusterfs-server
+          - glusterfs-client
+          - nginx
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Activer et démarrer les services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - glusterd
+        - nginx
+
+    - name: Créer le répertoire de stockage de la brique GlusterFS
+      ansible.builtin.file:
+        path: "{{ gluster_brick_dir }}"
+        state: directory
+        mode: "0755"
+
+
+    # --------------------------------------------------------------------------
+    # 2. INITIALISATION DU CLUSTER GLUSTERFS (depuis web-01)
+    # --------------------------------------------------------------------------
+    - name: Associer le nœud web-02 au cluster GlusterFS
+      ansible.builtin.command: "gluster peer probe {{ web02_prod_ip }}"
+      register: peer_probe
+      changed_when: "'already in peer list' not in peer_probe.stdout"
+      failed_when: "peer_probe.rc != 0 and 'already in peer list' not in peer_probe.stderr"
+      when: inventory_hostname == 'web-01'
+
+    - name: Attendre que web-02 soit validé dans le cluster
+      ansible.builtin.command: gluster peer status
+      register: peer_status
+      until: "'State: Peer in Cluster (Connected)' in peer_status.stdout"
+      retries: 15
+      delay: 2
+      changed_when: false
+      when: inventory_hostname == 'web-01'
+
+    - name: Vérifier si le volume GlusterFS existe déjà
+      ansible.builtin.command: "gluster volume info {{ gluster_vol_name }}"
+      register: vol_check
+      failed_when: false
+      changed_when: false
+      when: inventory_hostname == 'web-01'
+
+    - name: Créer le volume répliqué Replica 2
+      ansible.builtin.command: >
+        gluster volume create {{ gluster_vol_name }} replica 2
+        {{ web01_prod_ip }}:{{ gluster_brick_dir }}
+        {{ web02_prod_ip }}:{{ gluster_brick_dir }} force
+      when:
+        - inventory_hostname == 'web-01'
+        - vol_check.rc != 0
+
+    - name: Démarrer le volume GlusterFS
+      ansible.builtin.command: "gluster volume start {{ gluster_vol_name }}"
+      register: vol_start
+      changed_when: "'already started' not in vol_start.stdout"
+      failed_when: "vol_start.rc != 0 and 'already started' not in vol_start.stderr"
+      when: inventory_hostname == 'web-01'
+
+
+    # --------------------------------------------------------------------------
+    # 3. MONTAGE DU VOLUME PARTAGÉ SUR /var/www/html
+    # --------------------------------------------------------------------------
+    - name: Monter le volume GlusterFS sur /var/www/html
+      ansible.posix.mount:
+        path: "{{ web_mount_dir }}"
+        src: "127.0.0.1:/{{ gluster_vol_name }}"
+        fstype: glusterfs
+        opts: "defaults,_netdev"
+        state: mounted
+
+
+    # --------------------------------------------------------------------------
+    # 4. DÉPLOIEMENT DE LA VITRINE TECHSOLUTIONS INC.
+    # --------------------------------------------------------------------------
+    - name: Déployer la page d'accueil TechSolutions Inc.
+      ansible.builtin.copy:
+        dest: "{{ web_mount_dir }}/index.html"
+        owner: www-data
+        group: www-data
+        mode: "0644"
+        content: |
+          <!DOCTYPE html>
+          <html lang="fr">
+          <head>
+            <meta charset="UTF-8">
+            <title>TechSolutions Inc. - Infrastructure Haute Disponibilité</title>
+            <style>
+              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px; display: flex; justify-content: center; }
+              .container { max-width: 850px; background: #1e293b; padding: 35px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
+              h1 { color: #38bdf8; margin-top: 0; font-size: 2.2rem; }
+              p.lead { font-size: 1.15rem; color: #94a3b8; }
+              .badge { display: inline-block; padding: 4px 10px; background: #0284c7; color: white; border-radius: 6px; font-size: 0.85rem; font-weight: bold; margin-bottom: 20px; }
+              .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 25px 0; }
+              .card { background: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #38bdf8; }
+              .card h3 { margin: 0 0 8px 0; font-size: 1rem; color: #e2e8f0; }
+              .card p { margin: 0; font-size: 0.85rem; color: #64748b; }
+              footer { margin-top: 25px; border-top: 1px solid #334155; padding-top: 15px; font-size: 0.85rem; color: #64748b; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <span class="badge">PRODUCTION EN LIGNE</span>
+              <h1>TechSolutions Inc.</h1>
+              <p class="lead">Plateforme d'infrastructure d'entreprise provisionnée par <strong>Terraform</strong> et configurée via <strong>Ansible</strong>.</p>
+
+              <div class="grid">
+                <div class="card">
+                  <h3>Stockage Web</h3>
+                  <p>GlusterFS Replica 2 synchronisé sur 172.16.0.0/24.</p>
+                </div>
+                <div class="card">
+                  <h3>Base de données</h3>
+                  <p>PostgreSQL 17 hébergé sur pool Ceph RBD.</p>
+                </div>
+                <div class="card">
+                  <h3>Microservices</h3>
+                  <p>API Python Flask managée par systemd.</p>
+                </div>
+              </div>
+
+              <footer>Système opérationnel &bull; TechSolutions Inc. &copy; 2026</footer>
+            </div>
+          </body>
+          </html>
+      when: inventory_hostname == 'web-01'
+
+    - name: Assurer les permissions www-data sur /var/www/html
+      ansible.builtin.file:
+        path: "{{ web_mount_dir }}"
+        owner: www-data
+        group: www-data
+        recurse: true

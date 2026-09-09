@@ -1,0 +1,15 @@
+---
+# ==============================================================================
+# PLAYBOOK MAÎTRE : Déploiement complet de l'infrastructure TechSolutions Inc.
+# ==============================================================================
+
+- name: 1. Configuration du socle système commun
+  ansible.builtin.import_playbook: common.yml
+
+- name: 2. Déploiement de la base de données PostgreSQL
+  ansible.builtin.import_playbook: db.yml
+
+- name: 3. Déploiement de l'API interne Python Flask
+  ansible.builtin.import_playbook: api.yml
+
+- name: 4. Déploiement du cluster Web (GlusterFS Replica 2 et Nginx)

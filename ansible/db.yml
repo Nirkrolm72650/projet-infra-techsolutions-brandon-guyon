@@ -1,0 +1,88 @@
+---
+- name: Installation et configuration de PostgreSQL
+  hosts: db
+  become: true
+
+  vars:
+    db_name: techsolutions_db
+    db_user: tech_user
+    db_password: "TechPassword2026!"
+    pg_version: "17"
+    prod_subnet: "172.16.0.0/24"
+
+  tasks:
+    - name: Installer PostgreSQL et les dépendances Python
+      ansible.builtin.apt:
+        name:
+          - postgresql
+          - postgresql-contrib
+          - python3-psycopg2
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Configurer l'écoute sur toutes les interfaces réseau
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ pg_version }}/main/postgresql.conf"
+        regexp: "^#?listen_addresses\\s*="
+        line: "listen_addresses = '*'"
+      notify: Redémarrer PostgreSQL
+
+    - name: Autoriser le trafic du sous-réseau de production dans pg_hba.conf
+      ansible.builtin.lineinfile:
+        path: "/etc/postgresql/{{ pg_version }}/main/pg_hba.conf"
+        line: "host    {{ db_name }}    {{ db_user }}    {{ prod_subnet }}    scram-sha-256"
+        insertafter: EOF
+      notify: Redémarrer PostgreSQL
+
+    - name: Démarrer et activer le service PostgreSQL
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: true
+
+    - name: Appliquer immédiatement le redémarrage si nécessaire
+      ansible.builtin.meta: flush_handlers
+
+    - name: Créer le compte applicatif PostgreSQL
+      ansible.builtin.shell: |
+        su - postgres -c "psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='{{ db_user }}'\" | grep -q 1 || psql -c \"CREATE USER {{ db_user }} WITH PASSWORD '{{ db_password }}';\""
+      register: create_user
+      changed_when: "'CREATE ROLE' in create_user.stdout"
+
+    - name: Créer la base de données de l'application
+      ansible.builtin.shell: |
+        su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='{{ db_name }}'\" | grep -q 1 || psql -c \"CREATE DATABASE {{ db_name }} OWNER {{ db_user }};\""
+      register: create_db
+      changed_when: "'CREATE DATABASE' in create_db.stdout"
+
+    - name: Créer la table clients et insérer les données initiales
+      ansible.builtin.shell: |
+        su - postgres -c "psql -d {{ db_name }} << 'EOF'
+        CREATE TABLE IF NOT EXISTS clients (
+            id SERIAL PRIMARY KEY,
+            nom VARCHAR(100) NOT NULL,
+            entreprise VARCHAR(100) NOT NULL,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            statut VARCHAR(30) DEFAULT 'Actif',
+            cree_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        INSERT INTO clients (nom, entreprise, email, statut) VALUES
+            ('Emma Bernard', 'TechSolutions Cloud', 'emma@techsolutions.local', 'Actif'),
+            ('Thomas Dubois', 'TechSolutions Infra', 'thomas@techsolutions.local', 'Actif'),
+            ('Antoine Leroy', 'DataSphere Inc.', 'antoine@datasphere.fr', 'En attente'),
+            ('Cécile Moreau', 'SecOps Lab', 'cecile@secopslab.org', 'Actif')
+        ON CONFLICT (email) DO NOTHING;
+
+        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{ db_user }};
+        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{ db_user }};
+        EOF"
+      register: init_table
+      changed_when: "'INSERT 0' in init_table.stdout"
+
+  handlers:
+    - name: Redémarrer PostgreSQL
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted

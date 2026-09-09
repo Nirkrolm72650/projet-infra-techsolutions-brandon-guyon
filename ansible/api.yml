@@ -1,0 +1,110 @@
+---
+- name: Déploiement de l'API interne Python Flask
+  hosts: api
+  become: true
+
+  vars:
+    app_dir: "/opt/techsolutions-api"
+    db_host: "172.16.0.11"
+    db_name: "techsolutions_db"
+    db_user: "tech_user"
+    db_pass: "TechPassword2026!"
+
+  tasks:
+    - name: Installer Python, Flask et le connecteur PostgreSQL
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-flask
+          - python3-psycopg2
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Créer le dossier applicatif
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: debian
+        group: debian
+        mode: "0755"
+
+    - name: Déployer le code source de l'API Flask
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/app.py"
+        owner: debian
+        group: debian
+        mode: "0644"
+        content: |
+          from flask import Flask, jsonify
+          import psycopg2
+          from psycopg2.extras import RealDictCursor
+
+          app = Flask(__name__)
+
+          DB_CONFIG = {
+              "host": "{{ db_host }}",
+              "database": "{{ db_name }}",
+              "user": "{{ db_user }}",
+              "password": "{{ db_pass }}",
+              "connect_timeout": 3
+          }
+
+          @app.route("/api/health", methods=["GET"])
+          def health():
+              return jsonify({
+                  "status": "UP",
+                  "service": "techsolutions-api",
+                  "network": "production (172.16.0.0/24)"
+              }), 200
+
+          @app.route("/api/clients", methods=["GET"])
+          def get_clients():
+              try:
+                  conn = psycopg2.connect(**DB_CONFIG)
+                  cursor = conn.cursor(cursor_factory=RealDictCursor)
+                  cursor.execute("SELECT id, nom, entreprise, email, statut FROM clients ORDER BY id;")
+                  clients = cursor.fetchall()
+                  cursor.close()
+                  conn.close()
+                  return jsonify({"success": True, "count": len(clients), "data": clients}), 200
+              except Exception as err:
+                  return jsonify({"success": False, "error": str(err)}), 500
+
+          if __name__ == "__main__":
+              app.run(host="0.0.0.0", port=5000)
+      notify: Redémarrer l'API
+
+    - name: Créer l'unité systemd pour l'API Flask
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/techsolutions-api.service"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=TechSolutions Internal Flask API
+          After=network.target
+
+          [Service]
+          User=debian
+          WorkingDirectory={{ app_dir }}
+          ExecStart=/usr/bin/python3 {{ app_dir }}/app.py
+          Restart=always
+          RestartSec=3
+          Environment=PYTHONUNBUFFERED=1
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Redémarrer l'API
+
+    - name: Recharger systemd, activer et démarrer l'API
+      ansible.builtin.systemd:
+        name: techsolutions-api
+        daemon_reload: true
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Redémarrer l'API
+      ansible.builtin.systemd:
+        name: techsolutions-api
+        state: restarted

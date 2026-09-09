@@ -1,0 +1,28 @@
+---
+- name: Socle commun pour l'ensemble des VMs
+  hosts: all_servers
+  become: true
+
+  tasks:
+    - name: Mettre à jour le cache des paquets APT
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Installer les paquets système indispensables
+      ansible.builtin.apt:
+        name:
+          - qemu-guest-agent
+          - curl
+          - wget
+          - htop
+          - vim
+          - net-tools
+          - gnupg
+          - ca-certificates
+        state: present
+
+    - name: Activer et démarrer le service QEMU Guest Agent
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        state: started

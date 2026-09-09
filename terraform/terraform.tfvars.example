@@ -1,0 +1,6 @@
+pve_api_url      = "https://<IP_PVE>:8006/api2/json" # IP PVE joignable par le bastion
+pve_token_id     = "terraform-prov@pve!terraform-token"
+pve_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+target_node      = "pve-node-01"
+template_name    = "debian-13-template"
+ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... root@bastion-01" # Contenu de ~/.ssh/id_ed25519.pub
