@@ -85,7 +85,7 @@ Les sauvegardes sont centralisées sur **Proxmox Backup Server** (`10.20.10.30`)
 
 ## 6. URLs et Points d'Accès
 
-* **Interface Proxmox VE :** `https://10.20.10.18:8006` (Nœud 1), `:8007` (Nœud 2), `:8008` (Nœud 3)
+* **Interface Proxmox VE :** `https://10.20.10.18:8006` (Nœud 1), `:8009` (Nœud 2), `:8008` (Nœud 3)
 * **Passerelle Apache Guacamole :** `http://10.20.10.18:8080/guacamole/`
 * **Supervision Grafana :** `http://10.20.10.18:3000/`
 * **Proxmox Backup Server :** `https://10.20.10.30:8007/`
