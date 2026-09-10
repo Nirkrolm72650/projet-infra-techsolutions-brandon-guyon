@@ -23,7 +23,7 @@ variable "target_node" {
 variable "template_name" {
   description = "Nom ou ID du template Cloud-Init source"
   type        = string
-  default     = "debian12-cloudinit"
+  default     = "debian-13-template"
 }
 
 variable "ssh_public_key" {
