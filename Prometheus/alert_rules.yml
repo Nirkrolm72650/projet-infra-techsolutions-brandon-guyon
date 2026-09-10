@@ -1,0 +1,19 @@
+groups:
+  - name: techsolutions_alerts
+    rules:
+      - alert: NodeDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "N ^sud inaccessible : {{ $labels.instance }}"
+          description: "Le serveur {{ $labels.instance }} ne r  pond plus depuis plus d'une minute."
+
+      - alert: HighCpuUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Charge CPU   lev  e sur {{ $labels.instance }}"
