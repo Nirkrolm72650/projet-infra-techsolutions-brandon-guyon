@@ -1,0 +1,36 @@
+services:
+  guacamole-db:
+    image: postgres:15-alpine
+    container_name: guac-db
+    restart: always
+    environment:
+      POSTGRES_DB: guacamole_db
+      POSTGRES_USER: guacamole_user
+      POSTGRES_PASSWORD: 'GuacPassword2026!'
+    volumes:
+      - ./initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:ro
+      - guac_db_data:/var/lib/postgresql/data
+
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: guacd
+    restart: always
+
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: guacamole
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      GUACD_HOSTNAME: guacd
+      POSTGRESQL_HOSTNAME: guac-db
+      POSTGRESQL_DATABASE: guacamole_db
+      POSTGRESQL_USER: guacamole_user
+      POSTGRESQL_PASSWORD: 'GuacPassword2026!'
+    depends_on:
+      - guacamole-db
+      - guacd
+
+volumes:
+  guac_db_data:
