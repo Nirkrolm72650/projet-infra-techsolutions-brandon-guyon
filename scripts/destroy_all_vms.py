@@ -16,9 +16,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ==============================================================================
 # CONFIGURATION DE L'ACCÈS API PROXMOX
 # ==============================================================================
-PVE_API_URL = "https://10.20.10.18:8006/api2/json"
-PVE_TOKEN_ID = "terraform-prov@pve!terraform-token"
-PVE_TOKEN_SECRET = "a2829a96-e1cf-4dd1-b379-3442877e7261"
+PVE_API_URL = "https://10.20.10.18:8006/api2/json" # A changer si besoin
+PVE_TOKEN_ID = "terraform-prov@pve!terraform-token" # A changer si besoin
+PVE_TOKEN_SECRET = "a2829a96-e1cf-4dd1-b379-3442877e7261" # A changer si besoin
 
 HEADERS = {
     "Authorization": f"PVEAPIToken={PVE_TOKEN_ID}={PVE_TOKEN_SECRET}",
