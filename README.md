@@ -157,3 +157,80 @@ Pour purger proprement une plage de machines de test après validation :
 ```bash
 python3 scripts/destroy_all_vms.py --start 150 --end 152 --yes
 ```
+
+### 9. Commandes
+1. Ping toutes les vms
+```bash
+ansible -i hosts.ini all -m ping
+```
+
+2. Ping un groupe de vm
+```bash
+ansible -i hosts.ini db -m ping     # Uniquement les bases PostgreSQL
+ansible -i hosts.ini api -m ping    # Uniquement les serveurs Flask
+ansible -i hosts.ini web -m ping    # Uniquement les serveurs Nginx/GlusterFS
+```
+
+3. Relancer la configuration sur toutes les VMs
+```bash
+ansible-playbook -i hosts.ini master.yml
+```
+
+4. Rentrer dans le bastion (`pve-node-01`)
+```bash
+pct enter 200
+```
+
+1. Rentrer dans la conteneur monitoring (`pve-node-01`)
+```bash
+pct enter 201
+```
+
+
+### Dépannage GlusterFS : Désynchronisation du cluster (`Peer Rejected` / `Staging failed`)
+
+![Erreur-ansible-vm-web](/Screenshots/ansible-web-vms.png)
+
+#### Symptômes rencontrés
+* Lors de l'exécution du playbook `web.yml`, la tâche de vérification du cluster échoue avec le statut `State: Peer Rejected (Connected)`.
+* La création du volume répliqué renvoie :  
+  `volume create: web_vol: failed: Staging failed on 172.16.0.32. Error: Host 172.16.0.31 is not in 'Peer in Cluster' state`.
+
+#### Cause
+Ce problème survient lorsqu'un nœud web (`web-02`) est redéployé via Terraform. La nouvelle machine génère un nouvel UUID GlusterFS, tandis que `web-01` conserve l'ancien UUID associé à l'IP `172.16.0.32` dans `/var/lib/glusterd/peers/` et dans les fichiers de définition de volume. Le rejet mutuel bloque la formation du cluster et le montage de `/var/www/html`.
+
+#### Procédure de résolution
+
+1. **Purger l'état résiduel et réinitialiser les démons :**  
+   Exécuter ces commandes successivement sur `web-01` (`192.168.100.65`) et sur `web-02` (`192.168.100.66`) en `root` :
+   ```bash
+   systemctl stop glusterd
+   killall -9 glusterd glusterfs glusterfsd 2>/dev/null || true
+   rm -rf /var/lib/glusterd/*
+   rm -rf /data/glusterfs/web_brick/* /data/glusterfs/web_brick/.glusterfs
+   setfattr -x trusted.glusterfs.volume-id /data/glusterfs/web_brick 2>/dev/null || true
+   setfattr -x trusted.gfid /data/glusterfs/web_brick 2>/dev/null || true
+   systemctl start glusterd
+    ```
+2. Établir l'appairage croisé :
+    - Depuis web-01 :
+    ```bash
+    gluster peer probe 172.16.0.32
+    ```
+    - Depuis web-02 :
+    ```bash
+    gluster peer probe 172.16.0.31
+    ```
+3. Vérifier l'état du cluster :
+
+- Sur les deux nœuds, lancer gluster peer status. La commande doit afficher Number of Peers: 1 et :
+```
+State: Peer in Cluster (Connected)
+```
+
+4. Rejouer l'automatisation Ansible :
+- Depuis le conteneur bastion-01, relancer le playbook web :
+```bash
+cd ~/ansible-cluster
+ansible-playbook -i hosts.ini web.yml
+```
