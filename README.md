@@ -86,6 +86,20 @@ Les sauvegardes sont centralisées sur **Proxmox Backup Server** (`10.20.10.30`)
 ## 6. URLs et Points d'Accès
 
 * **Interface Proxmox VE :** `https://10.20.10.18:8006` (Nœud 1), `:8009` (Nœud 2), `:8008` (Nœud 3)
-* **Passerelle Apache Guacamole :** `http://10.20.10.18:8080/guacamole/`
+* **Passerelle Apache Guacamole :** `http://10.20.10.18:8080/guacamole/` 
 * **Supervision Grafana :** `http://10.20.10.18:3000/`
 * **Proxmox Backup Server :** `https://10.20.10.30:8007/`
+
+### 7. Identifiants d'accès à la passerelle Apache Guacamole
+
+L'accès s'effectue sur `http://10.20.10.18:8080/guacamole/` via les comptes suivants :
+
+| Identifiant | Mot de passe | Rôle | Périmètre et connexions autorisées |
+| :--- | :--- | :--- | :--- |
+| **`guacadmin`** | `guacadmin` | Administrateur Guacamole | Gestion globale de la plateforme, création/édition des connexions et comptes. |
+| **`bad`** | `bad12345` | Admin Senior | `Bastion - BAD`, `pve-node-01`, `pve-node-02`, `pve-node-03`. |
+| **`emma`** | `bad12345` | Admin Système | `Bastion - Emma`, `pve-node-01`, `pve-node-02`, `pve-node-03`. |
+| **`antoine`** | `bad12345` | DevOps | `Bastion - Antoine` uniquement (droits sudo limités à Terraform et Python). Se connecte directement au bastion avec son nom d'utilisateur|
+| **`cecile`** | `bad12345` | DevOps | `Bastion - Cécile` uniquement (droits sudo limités à Terraform et Python). Se connecte directement au bastion avec son nom d'utilisateur |
+
+*Note : Les profils Lucas (stagiaire), Nicolas et Laura (support) ne disposent d'aucun compte Guacamole, conformément à la politique de restriction d'accès.*
