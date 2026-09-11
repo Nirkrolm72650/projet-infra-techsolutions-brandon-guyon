@@ -103,3 +103,57 @@ L'accès s'effectue sur `http://10.20.10.18:8080/guacamole/` via les comptes sui
 | **`cecile`** | `bad12345` | DevOps | `Bastion - Cécile` uniquement (droits sudo limités à Terraform et Python). Se connecte directement au bastion avec son nom d'utilisateur |
 
 *Note : Les profils Lucas (stagiaire), Nicolas et Laura (support) ne disposent d'aucun compte Guacamole, conformément à la politique de restriction d'accès.*
+
+## 8. Guide de déploiement et automatisation
+
+L'ensemble des opérations d'automatisation s'exécute depuis le conteneur `bastion-01` avec un profil habilité (`bad`, `emma`, `antoine` ou `cecile`).
+
+### Étape 1 : Configuration des variables Terraform
+
+Avant d'exécuter Terraform, copier le modèle de variables et renseigner les accès API Proxmox :
+
+```bash
+cd terraform/
+cp terraform.tfvars.example terraform.tfvars
+nano terraform.tfvars
+```
+- Adapter les paramètres selon l'environnement :
+
+- pve_api_url : URL d'accès API au cluster (ex. https://192.168.100.11:8006/api2/json).
+
+- ;pve_token_id : Identifiant du jeton API (ex. terraform-prov@pve!terraform-token).
+
+- pve_token_secret : Secret du jeton généré sur Proxmox VE.
+
+- ssh_public_key : Clé publique SSH du bastion (contenu de ~/.ssh/id_ed25519.pub).
+
+### Étape 2 : Déploiement automatisé global
+Pour instancier les machines virtuelles et exécuter les playbooks de configuration applicative en une seule passe, lancer le script global à la racine du dépôt :
+```bash
+chmod +x scripts/deploy-all.sh
+./scripts/deploy-all.sh
+```
+
+### Étape 3 : Résolution d'incidents Ansible (Serveurs web-01 et web-02)
+Si le déploiement Ansible rencontre un blocage sur les nœuds web (notamment lors de l'initialisation du replica GlusterFS ou du rechargement de Nginx) :
+
+1. Se positionner directement dans le répertoire Ansible :
+```bash
+cd ansible-cluster/
+```
+
+2. Vérifier la joignabilité SSH des serveurs web :
+```bash
+ansible -i hosts.ini web -m ping
+```
+
+3. Relancer spécifiquement le playbook dédié aux serveurs web :
+```bash
+ansible-playbook -i hosts.ini web.yml
+```
+
+### Étape 4 : Décommissionnement des VMs
+Pour purger proprement une plage de machines de test après validation :
+```bash
+python3 scripts/destroy_all_vms.py --start 150 --end 152 --yes
+```
